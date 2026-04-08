@@ -1,0 +1,9 @@
+{
+  "name": "codex-delegate",
+  "version": "1.0.0",
+  "description": "Intelligent on-demand delegation of coding tasks to OpenAI Codex CLI, with smart judgment criteria and result review",
+  "author": {
+    "name": "cjh"
+  },
+  "keywords": ["codex", "delegation", "coding", "collaboration"]
+}
