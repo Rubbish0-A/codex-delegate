@@ -64,8 +64,7 @@ cp -r codex-delegate/ ~/.claude/plugins/codex-delegate/
 ### Step 2: Make Scripts Executable
 
 ```bash
-chmod +x ~/.claude/plugins/codex-delegate/scripts/run-codex-task.sh
-chmod +x ~/.claude/plugins/codex-delegate/scripts/run-codex-review.sh
+chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh
 ```
 
 ### Step 3: Register Plugin
@@ -77,7 +76,7 @@ Add to `~/.claude/plugins/installed_plugins.json` inside the `"plugins"` object:
   {
     "scope": "user",
     "installPath": "ABSOLUTE_PATH_TO/.claude/plugins/codex-delegate",
-    "version": "1.1.0",
+    "version": "1.2.1",
     "installedAt": "2026-04-08T00:00:00.000Z",
     "lastUpdated": "2026-04-08T00:00:00.000Z"
   }
@@ -112,7 +111,7 @@ In a new Claude Code session:
 | `401 Unauthorized` | Set `OPENAI_API_KEY` environment variable |
 | Plugin not loading | Check `installed_plugins.json` path is correct and absolute |
 | `/codex` command not recognized | Verify `commands/codex.md` exists and restart Claude Code |
-| Scripts fail with permission error | Run `chmod +x` on both scripts |
+| Scripts fail with permission error | Run `chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh` |
 
 ## Model Selection
 

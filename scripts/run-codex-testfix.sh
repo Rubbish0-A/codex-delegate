@@ -12,7 +12,7 @@ TEST_CMD="${2:?Error: test command is required (e.g., 'npm test', 'pytest')}"
 MAX_ROUNDS="${3:-3}"
 FOCUS="${4:-}"
 
-OUTPUT_FILE=$(mktemp /tmp/codex-testfix-XXXXXX.md)
+OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-XXXXXX.md")
 STASHED=false
 
 cd "$WORKDIR"

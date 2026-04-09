@@ -10,7 +10,7 @@ MODE="${1:-full-auto}"
 WORKDIR="${2:-.}"
 PROMPT="${3:?Error: prompt is required}"
 
-OUTPUT_FILE=$(mktemp /tmp/codex-output-XXXXXX.md)
+OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-output-XXXXXX.md")
 STASHED=false
 
 cd "$WORKDIR"

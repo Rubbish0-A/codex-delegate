@@ -43,10 +43,10 @@ Examples:
    - Implementation: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh "full-auto" "<cwd>" "<prompt>"`
    - Review: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh "<cwd>" "<review_prompt>"`
 4. **Review results** — Check Codex output and `git diff` for changes
-5. **Report back** — Summarize results in Chinese, highlight any issues
+5. **Report back** — Summarize results in the user's language, highlight any issues
 
 ## Important
 
 - Always review Codex output before reporting success
 - If Codex fails, diagnose and either retry with a better prompt or handle directly
-- Communicate results in the user's preferred language
+- Communicate results in the user's language (auto-detect from conversation context)

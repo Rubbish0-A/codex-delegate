@@ -73,76 +73,23 @@
 
 ## 安装
 
-### 前置条件
-
-| 依赖 | 安装方式 | 验证 |
-|------|---------|------|
-| **Claude Code CLI** | [官方文档](https://docs.anthropic.com/en/docs/claude-code) | `claude --version` |
-| **Codex CLI** | `npm install -g @openai/codex` | `codex --version` |
-| **OpenAI API Key** | 见下方配置 | `codex exec --full-auto --ephemeral "echo hello"` |
-
-### 配置 OpenAI API Key
+### 快速安装
 
 ```bash
-# 方式一：环境变量（推荐）
-# 添加到你的 shell 配置文件（~/.bashrc, ~/.zshrc 等）
-export OPENAI_API_KEY="sk-your-key-here"
+# 1. 确保已安装依赖
+codex --version   # 需要 Codex CLI (npm install -g @openai/codex)
+claude --version  # 需要 Claude Code CLI
 
-# 方式二：Codex 配置文件
-# 编辑 ~/.codex/config.toml
-[auth]
-api_key = "sk-your-key-here"
-
-# 方式三：交互式登录
-codex login
-```
-
-### 安装插件
-
-**第一步：复制插件文件**
-
-```bash
-# 克隆仓库
+# 2. 克隆并安装
 git clone https://github.com/Rubbish0-A/codex-delegate.git
-
-# 复制到 Claude Code 插件目录
 cp -r codex-delegate/ ~/.claude/plugins/codex-delegate/
-
-# 给脚本加执行权限
 chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh
+
+# 3. 注册插件（编辑两个配置文件），然后重启 Claude Code
 ```
 
-**第二步：注册插件**
-
-编辑 `~/.claude/plugins/installed_plugins.json`，在 `"plugins"` 对象内添加：
-
-```json
-"codex-delegate@local": [
-  {
-    "scope": "user",
-    "installPath": "YOUR_HOME_DIR/.claude/plugins/codex-delegate",
-    "version": "1.2.0",
-    "installedAt": "2026-04-08T00:00:00.000Z",
-    "lastUpdated": "2026-04-08T00:00:00.000Z"
-  }
-]
-```
-
-> **注意**：`installPath` 必须是绝对路径。  
-> Windows 示例：`C:\\Users\\yourname\\.claude\\plugins\\codex-delegate`  
-> macOS/Linux 示例：`/home/yourname/.claude/plugins/codex-delegate`
-
-**第三步：启用插件**
-
-编辑 `~/.claude/settings.json`，在 `"enabledPlugins"` 内添加：
-
-```json
-"codex-delegate@local": true
-```
-
-**第四步：重启 Claude Code**
-
-开一个新的 Claude Code 会话，插件即可生效。
+> 详细的安装步骤（API Key 配置、插件注册、验证、排障）请参考  
+> **[`skills/delegate-to-codex/references/setup-guide.md`](skills/delegate-to-codex/references/setup-guide.md)**
 
 ---
 
@@ -228,49 +175,17 @@ Claude："代码写完了，要不要让 Codex 做个交叉审查？"
 
 ---
 
-## 冲突防护机制
+## 冲突防护
 
-Claude 和 Codex 操作**同一个文件系统**，插件通过三层防护避免冲突：
+Claude 和 Codex 操作**同一个文件系统**，脚本内置三层自动防护：
 
-### 第一层：委派前（Pre-flight）
+| 阶段 | 防护措施 |
+|------|---------|
+| **委派前** | 检测 git 状态 → 自动 stash 未提交改动 → 记录 HEAD 用于回滚 |
+| **执行中** | Codex 在 workspace-write 沙箱运行；Claude 做范围隔离避免文件冲突 |
+| **委派后** | 自动输出 `git diff --stat` + 回滚命令 + stash 恢复提醒 |
 
-```
-✓ 检测当前是否在 git 仓库内
-✓ 检查是否有未提交的改动
-✓ 如有改动 → 自动 git stash 保护
-✓ 记录当前 HEAD commit 用于回滚
-```
-
-### 第二层：执行时（Isolation）
-
-```
-✓ Codex 在 workspace-write 沙箱中执行
-✓ Claude 的 SKILL.md 要求范围隔离：
-  - 给 Codex 指定明确的文件范围
-  - 避免委派 Claude 正在编辑的文件
-  - 委派前先写完所有待处理的编辑
-```
-
-### 第三层：委派后（Post-flight）
-
-```
-✓ 自动输出 git diff --stat 显示改动文件
-✓ 列出新增的 untracked 文件
-✓ 提供一键回滚命令
-✓ 提示 stash 恢复步骤
-```
-
-### 回滚操作
-
-如果 Codex 改错了：
-
-```bash
-# 撤销所有 Codex 改动
-git checkout -- . && git clean -fd
-
-# 如果之前有 stash，恢复 Claude 的改动
-git stash pop
-```
+回滚：`git checkout -- . && git clean -fd`，恢复 stash：`git stash pop`
 
 ---
 

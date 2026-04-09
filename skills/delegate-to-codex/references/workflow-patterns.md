@@ -19,7 +19,14 @@ Claude finishes code → Suggest Codex review → Codex reviews → Report findi
 **Execution:**
 
 ```bash
+# Review uncommitted changes (default)
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh "<working_dir>" "<review_instructions>"
+
+# Review changes against a base branch
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh "<working_dir>" "<review_instructions>" --base main
+
+# Review a specific commit
+bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh "<working_dir>" "<review_instructions>" --commit abc123
 ```
 
 **Prompt templates:**

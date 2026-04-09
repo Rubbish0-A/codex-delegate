@@ -8,7 +8,7 @@ description: >-
   Codex CLI would provide clear value — such as post-development cross review,
   test-fix cycles, bug diagnosis, batch file modifications, or precise
   code micro-adjustments during design discussions.
-version: 1.2.0
+version: 1.2.1
 ---
 
 # Delegate to Codex
@@ -63,74 +63,30 @@ Minimize conflict by giving Codex a **narrow, non-overlapping scope**:
 
 ## Development Workflow Patterns
 
-Beyond on-demand delegation, Codex integrates into the development lifecycle at key checkpoints. See **`references/workflow-patterns.md`** for detailed prompt templates and examples.
+Codex integrates into development at key checkpoints. Consult **`references/workflow-patterns.md`** for detailed prompt templates.
 
-### Pattern 1: Post-Development Cross Review
+| Pattern | When | Codex Role | Script |
+|---------|------|-----------|--------|
+| **Cross Review** | Claude writes 50+ lines, or before commit | Report findings only, NO auto-fix | `run-codex-review.sh` |
+| **Test-Fix Cycle** | Tests failing after implementation | Run tests → fix → re-run (max 3 rounds) | `run-codex-testfix.sh` |
+| **Bug Diagnosis** | Bug reported, root cause unclear | Read-only analysis, suggest fixes | `run-codex-task.sh "read-only"` |
+| **Verification** | Before marking feature complete | Cross Review + Test-Fix sequentially | Both scripts |
 
-**When:** Claude finishes writing 50+ lines of code, modifies security/payment/data logic, or before committing.
-
-**How:** Run `codex review --uncommitted`. Codex reports findings with severity levels. Claude reviews the findings and decides with the user which to fix. **Codex does NOT auto-fix — it only reports.**
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh "<working_dir>" "<review_instructions>"
-```
-
-Proactively suggest this after completing significant implementations:
-> "代码写完了，要不要让 Codex 做个交叉审查？它会从另一个角度检查 bug 和安全问题。"
-
-### Pattern 2: Test-Fix Cycle (max 3 rounds)
-
-**When:** Tests are failing after implementation or refactor.
-
-**How:** Codex runs tests, diagnoses failures, fixes source code, re-runs. Maximum 3 rounds. If still failing, hands back to Claude with diagnosis.
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-testfix.sh "<working_dir>" "<test_command>" 3 "<focus_hint>"
-```
-
-After Codex returns:
-- All pass → Review fixes via `git diff`, verify correctness, report to user
-- Still failing → Read Codex diagnosis, Claude takes over analysis
-
-### Pattern 3: Bug Diagnosis (read-only)
-
-**When:** A bug is reported and the root cause is unclear.
-
-**How:** Codex analyzes in **read-only mode** — traces code paths, identifies root cause, suggests fix approaches ranked by confidence. Does NOT modify files.
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh "read-only" "<working_dir>" "<diagnosis_prompt>"
-```
-
-After Codex returns:
-- Claude validates the diagnosis against its own understanding
-- Present both analyses to user if they differ
-
-### Pattern 4: Implementation Verification (Review + Test)
-
-**When:** Claude is about to mark a feature complete or before commit/deploy.
-
-**How:** Run Pattern 1 (review) first, then Pattern 2 (test-fix) sequentially. Combined report to user.
-
-### Workflow Decision Tree
+### Decision Tree
 
 ```
 Claude finished writing code?
-├── Significant (50+ lines) → Suggest Pattern 1 (Cross Review)
-│   └── Tests exist? → Then Pattern 2 (Test-Fix)
-├── Simple change → Claude reviews own code
-│
-Bug reported?
-├── Complex → Pattern 3 (Bug Diagnosis, read-only)
-├── Simple → Claude fixes directly
-│
-Tests failing?
-├── Multiple failures → Pattern 2 (Test-Fix Cycle)
-├── Single failure → Claude fixes directly
-│
-About to commit/deploy?
-└── Pattern 4 (Implementation Verification)
+├── Significant (50+ lines) → Cross Review, then Test-Fix if tests exist
+├── Simple → Claude self-reviews
+Bug reported? Complex → Bug Diagnosis (read-only)
+Tests failing? Multiple → Test-Fix Cycle (max 3 rounds)
+About to commit? → Verification (Review + Test)
 ```
+
+### Proactive Suggestion
+
+After completing significant implementations, suggest:
+> "代码写完了，要不要让 Codex 做个交叉审查？"
 
 ## Suggesting Codex to the User
 
@@ -144,14 +100,7 @@ Always let the user decide. Never auto-delegate without the user's awareness and
 
 ### Step 1: Prepare a Scoped Prompt
 
-Write a clear, self-contained prompt for Codex. Include:
-- Specific files or directories to work on
-- Exact changes expected (be precise, not vague)
-- Constraints, patterns, or coding style to follow
-- What NOT to change
-
-Bad prompt: "Fix the bugs"
-Good prompt: "In src/auth/middleware.ts, fix the session timeout logic: change the hardcoded 3600 to read from SESSION_TIMEOUT_SECONDS env var with a default of 3600. Update the corresponding test in tests/auth/middleware.test.ts."
+Write a clear, self-contained prompt for Codex: specific files, exact changes, constraints, what NOT to change. See **`references/workflow-patterns.md`** for prompt templates per pattern.
 
 ### Step 2: Choose Execution Mode
 
