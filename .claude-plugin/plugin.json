@@ -1,7 +1,7 @@
 {
   "name": "codex-delegate",
-  "version": "1.0.0",
-  "description": "Intelligent on-demand delegation of coding tasks to OpenAI Codex CLI, with smart judgment criteria and result review",
+  "version": "1.2.0",
+  "description": "Intelligent Claude-Codex collaboration plugin with on-demand delegation, cross review, test-fix cycles, and bug diagnosis",
   "author": {
     "name": "cjh"
   },

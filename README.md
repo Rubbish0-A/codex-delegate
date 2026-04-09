@@ -16,17 +16,21 @@
 | **智能判断** | Claude 根据任务特征自动判断是否需要 Codex 介入，不会盲目委派 |
 | **精确委派** | 将明确范围的编码任务交给 Codex 非交互执行，结果自动回收 |
 | **冲突防护** | 委派前自动 git stash 保护现有改动，委派后自动输出 diff 和回滚信息 |
-| **代码审查** | 支持让 Codex 对未提交的改动做独立代码审查 |
+| **交叉审查** | Claude 写完代码后，Codex 做独立 review，报告问题和建议 |
+| **测试修复循环** | Codex 跑测试 → 修 bug → 再跑，最多 3 轮，超过交回 Claude |
+| **Bug 诊断** | Codex 只读分析代码，定位 bug 根因，给出修复方案供 Claude 决策 |
 | **双触发方式** | 自然语言（"交给 codex"）和斜杠命令（`/codex`）均可触发 |
 
 ### 使用场景
 
 ```
 ✅ 适合交给 Codex 的任务
+├── 交叉审查：Claude 写完代码 → Codex review 检查 bug 和安全问题
+├── 测试修复：跑测试 → 修失败 → 再跑（最多 3 轮自动循环）
+├── Bug 诊断：只读分析代码，定位根因，给出修复方案
 ├── 精确的代码微调（Claude 给方向，Codex 精准落刀）
 ├── 批量/重复性修改（20 个文件同一模式替换）
 ├── 设计阶段的快速原型验证
-├── 迭代式测试修复循环
 └── 用户明确指定让 Codex 做的任务
 
 ❌ 不适合交给 Codex 的任务
@@ -99,14 +103,13 @@ codex login
 
 ```bash
 # 克隆仓库
-git clone https://github.com/YOUR_USERNAME/codex-delegate.git
+git clone https://github.com/Rubbish0-A/codex-delegate.git
 
 # 复制到 Claude Code 插件目录
 cp -r codex-delegate/ ~/.claude/plugins/codex-delegate/
 
 # 给脚本加执行权限
-chmod +x ~/.claude/plugins/codex-delegate/scripts/run-codex-task.sh
-chmod +x ~/.claude/plugins/codex-delegate/scripts/run-codex-review.sh
+chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh
 ```
 
 **第二步：注册插件**
@@ -118,7 +121,7 @@ chmod +x ~/.claude/plugins/codex-delegate/scripts/run-codex-review.sh
   {
     "scope": "user",
     "installPath": "YOUR_HOME_DIR/.claude/plugins/codex-delegate",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "installedAt": "2026-04-08T00:00:00.000Z",
     "lastUpdated": "2026-04-08T00:00:00.000Z"
   }
@@ -158,7 +161,37 @@ chmod +x ~/.claude/plugins/codex-delegate/scripts/run-codex-review.sh
 
 Claude 会自动识别意图并调用 Codex。
 
-### 方式二：斜杠命令
+### 方式二：开发流程中的协作（v1.2 新增）
+
+Claude 会在开发流程的关键节点主动建议 Codex 介入：
+
+```
+场景一：交叉审查（Claude 写完代码后）
+────────────────────────────────────
+你：帮我实现用户注册接口
+Claude：[写完代码]
+Claude："代码写完了，要不要让 Codex 做个交叉审查？"
+你："好"
+→ Codex review，报告 2 个 HIGH + 3 个 MEDIUM 问题
+→ Claude 逐条分析，和你讨论哪些要改
+
+场景二：测试修复循环
+────────────────────────────────────
+你："测试跑不过，让 codex 修一下"
+→ Codex 跑测试 → 发现 4 个失败 → 修复 → 再跑
+→ 第 2 轮：还剩 1 个失败 → 修复 → 再跑
+→ 第 3 轮：全部通过 ✓
+→ Claude review Codex 的修复，确认质量后告诉你
+
+场景三：Bug 诊断（只读分析）
+────────────────────────────────────
+你："这个接口返回 500，让 codex 查一下"
+→ Codex 只读分析代码，不改任何文件
+→ 报告：根因在 db.query() 未处理 null，建议 3 种修复方案
+→ Claude 评估方案，和你讨论用哪个
+```
+
+### 方式三：斜杠命令
 
 ```bash
 # 实现功能
@@ -257,7 +290,8 @@ codex-delegate/
 │           └── setup-guide.md          # 安装配置指南
 ├── scripts/
 │   ├── run-codex-task.sh               # 执行编码任务的封装脚本
-│   └── run-codex-review.sh             # 执行代码审查的封装脚本
+│   ├── run-codex-review.sh             # 执行代码审查的封装脚本
+│   └── run-codex-testfix.sh            # 测试修复循环脚本（最多 3 轮）
 └── README.md
 ```
 
@@ -269,6 +303,8 @@ codex-delegate/
 | `codex.md` | Command | 提供 `/codex` 斜杠命令入口 |
 | `run-codex-task.sh` | Script | 封装 `codex exec`，含 pre/post-flight 安全检查 |
 | `run-codex-review.sh` | Script | 封装 `codex review`，针对代码审查场景 |
+| `run-codex-testfix.sh` | Script | 测试修复循环：跑测试→修bug→再跑，最多 3 轮 |
+| `workflow-patterns.md` | Reference | 4 种开发流程模式的详细 prompt 模板和决策树 |
 | `codex-cli-reference.md` | Reference | Codex CLI 参数速查，Claude 按需加载 |
 | `setup-guide.md` | Reference | 新用户安装配置指南 |
 
