@@ -73,22 +73,11 @@
 
 ## 安装
 
-### 快速安装
+### 安装步骤
 
-```bash
-# 1. 确保已安装依赖
-codex --version   # 需要 Codex CLI (npm install -g @openai/codex)
-claude --version  # 需要 Claude Code CLI
+Claude Code 插件需要注册为 marketplace 才能被正确发现和加载。
 
-# 2. 克隆并安装
-git clone https://github.com/Rubbish0-A/codex-delegate.git
-cp -r codex-delegate/ ~/.claude/plugins/codex-delegate/
-chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh
-
-# 3. 注册插件（编辑两个配置文件），然后重启 Claude Code
-```
-
-> 详细的安装步骤（API Key 配置、插件注册、验证、排障）请参考  
+> 完整的 6 步安装指南（含 API Key 配置、代理配置、排障）请参考  
 > **[`skills/delegate-to-codex/references/setup-guide.md`](skills/delegate-to-codex/references/setup-guide.md)**
 
 ---
@@ -194,7 +183,8 @@ Claude 和 Codex 操作**同一个文件系统**，脚本内置三层自动防�
 ```
 codex-delegate/
 ├── .claude-plugin/
-│   └── plugin.json                     # 插件清单
+│   ├── plugin.json                     # 插件清单
+│   └── marketplace.json                # marketplace 发现入口
 ├── commands/
 │   └── codex.md                        # /codex 斜杠命令定义
 ├── skills/
@@ -312,10 +302,10 @@ scripts/run-codex-test.sh
 |------|---------|
 | `codex: command not found` | 安装 Codex CLI：`npm install -g @openai/codex` |
 | `401 Unauthorized` | 配置 `OPENAI_API_KEY` 环境变量 |
+| 404 / API 代理不兼容 | 参考 [setup-guide.md](skills/delegate-to-codex/references/setup-guide.md) 的代理配置章节 |
 | `Not inside a trusted directory` | 确保在 git 仓库内运行，或脚本会自动添加 `--skip-git-repo-check` |
-| 插件未加载 | 检查 `installed_plugins.json` 路径是否正确且为绝对路径 |
+| 插件未加载 | 需要完成 marketplace 注册，参考 setup-guide.md 的 6 步安装 |
 | `/codex` 命令未识别 | 确认 `commands/codex.md` 存在，重启 Claude Code |
-| 脚本权限错误 | `chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh` |
 | Codex 改错了文件 | 用输出中的回滚命令：`git checkout -- . && git clean -fd` |
 
 ---
