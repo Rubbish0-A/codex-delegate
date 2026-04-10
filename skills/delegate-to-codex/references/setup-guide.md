@@ -53,49 +53,81 @@ codex exec --full-auto --ephemeral "echo hello world"
 
 ## Plugin Installation
 
-### Step 1: Copy Plugin Files
-
-Copy the `codex-delegate/` directory to your Claude Code plugins directory:
+### Step 1: Clone to marketplace directory
 
 ```bash
-cp -r codex-delegate/ ~/.claude/plugins/codex-delegate/
+cd ~/.claude/plugins/marketplaces
+git clone https://github.com/Rubbish0-A/codex-delegate.git codex-delegate
 ```
 
-### Step 2: Make Scripts Executable
+### Step 2: Copy to cache directory
 
 ```bash
-chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh
+mkdir -p ~/.claude/plugins/cache/codex-delegate/codex-delegate/1.3.0
+cp -r ~/.claude/plugins/marketplaces/codex-delegate/* ~/.claude/plugins/cache/codex-delegate/codex-delegate/1.3.0/
+cp -r ~/.claude/plugins/marketplaces/codex-delegate/.claude-plugin ~/.claude/plugins/cache/codex-delegate/codex-delegate/1.3.0/
+chmod +x ~/.claude/plugins/cache/codex-delegate/codex-delegate/1.3.0/scripts/*.sh
 ```
 
-### Step 3: Register Plugin
+### Step 3: Register marketplace
 
-Add to `~/.claude/plugins/installed_plugins.json` inside the `"plugins"` object:
+Add to `~/.claude/plugins/known_marketplaces.json`:
 
 ```json
-"codex-delegate@local": [
+"codex-delegate": {
+  "source": {
+    "source": "github",
+    "repo": "Rubbish0-A/codex-delegate"
+  },
+  "installLocation": "ABSOLUTE_PATH/.claude/plugins/marketplaces/codex-delegate",
+  "lastUpdated": "2026-04-10T00:00:00.000Z",
+  "autoUpdate": true
+}
+```
+
+### Step 4: Register plugin
+
+Add to `~/.claude/plugins/installed_plugins.json` inside `"plugins"`:
+
+```json
+"codex-delegate@codex-delegate": [
   {
     "scope": "user",
-    "installPath": "ABSOLUTE_PATH_TO/.claude/plugins/codex-delegate",
-    "version": "1.2.1",
-    "installedAt": "2026-04-08T00:00:00.000Z",
-    "lastUpdated": "2026-04-08T00:00:00.000Z"
+    "installPath": "ABSOLUTE_PATH/.claude/plugins/cache/codex-delegate/codex-delegate/1.3.0",
+    "version": "1.3.0",
+    "installedAt": "2026-04-10T00:00:00.000Z",
+    "lastUpdated": "2026-04-10T00:00:00.000Z",
+    "gitCommitSha": "GIT_COMMIT_SHA"
   }
 ]
 ```
 
-Replace `ABSOLUTE_PATH_TO` with your actual home directory path (e.g., `C:\\Users\\yourname` on Windows, `/home/yourname` on Linux).
+Get `GIT_COMMIT_SHA` with: `cd ~/.claude/plugins/marketplaces/codex-delegate && git rev-parse HEAD`
 
-### Step 4: Enable Plugin
+Replace `ABSOLUTE_PATH` with your home directory (e.g., `C:\\Users\\yourname` on Windows, `/home/yourname` on Linux).
 
-Add to `~/.claude/settings.json` inside `"enabledPlugins"`:
+### Step 5: Enable and add marketplace source
 
+Add to `~/.claude/settings.json`:
+
+In `"enabledPlugins"`:
 ```json
-"codex-delegate@local": true
+"codex-delegate@codex-delegate": true
 ```
 
-### Step 5: Restart Claude Code
+In `"extraKnownMarketplaces"`:
+```json
+"codex-delegate": {
+  "source": {
+    "source": "github",
+    "repo": "Rubbish0-A/codex-delegate"
+  }
+}
+```
 
-Start a new Claude Code session. The plugin will auto-discover skills and commands.
+### Step 6: Restart Claude Code
+
+Start a new Claude Code session. The plugin will appear in the skill list.
 
 ## Verification
 

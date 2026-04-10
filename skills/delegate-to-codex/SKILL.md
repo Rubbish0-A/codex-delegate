@@ -8,7 +8,7 @@ description: >-
   Codex CLI would provide clear value — such as post-development cross review,
   test-fix cycles, bug diagnosis, batch file modifications, or precise
   code micro-adjustments during design discussions.
-version: 1.2.1
+version: 1.3.0
 ---
 
 # Delegate to Codex
