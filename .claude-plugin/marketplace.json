@@ -1,0 +1,24 @@
+{
+  "name": "codex-delegate",
+  "owner": {
+    "name": "Andy_Chen"
+  },
+  "metadata": {
+    "description": "Claude Code + Codex CLI intelligent collaboration plugin with on-demand delegation, cross review, test-fix cycles, and bug diagnosis"
+  },
+  "plugins": [
+    {
+      "name": "codex-delegate",
+      "source": "./",
+      "description": "Intelligent Claude-Codex collaboration plugin with on-demand delegation, cross review, test-fix cycles, and bug diagnosis",
+      "version": "1.2.1",
+      "author": {
+        "name": "Andy_Chen"
+      },
+      "homepage": "https://github.com/Rubbish0-A/codex-delegate",
+      "repository": "https://github.com/Rubbish0-A/codex-delegate",
+      "license": "MIT",
+      "keywords": ["codex", "delegation", "collaboration", "code-review", "test-fix"]
+    }
+  ]
+}
