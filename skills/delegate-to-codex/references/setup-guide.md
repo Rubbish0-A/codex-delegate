@@ -103,12 +103,50 @@ In a new Claude Code session:
 - Type `/codex test` — should trigger the codex command
 - Say "让 codex 帮我检查当前目录" — should trigger the skill
 
+## Using an API Proxy (instead of direct OpenAI)
+
+If you connect through a proxy instead of directly to `api.openai.com`, configure `~/.codex/config.toml`:
+
+```toml
+model_provider = "crs"
+model = "gpt-5.4"
+disable_response_storage = true
+preferred_auth_method = "apikey"
+
+[model_providers.crs]
+name = "crs"
+base_url = "http://YOUR_PROXY_HOST:PORT/openai"
+wire_api = "responses"
+requires_openai_auth = true
+
+[windows]
+sandbox = "elevated"
+```
+
+**Common proxy mistakes:**
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| `base_url` missing `/openai` suffix | 404 on `/api/responses` | Add `/openai` to the URL |
+| `wire_api = "chat"` | Codex v0.118+ rejects it | Must be `"responses"` |
+| `model_provider = "anthropic"` | "not found" error | Codex only supports OpenAI-compatible providers |
+| Chinese characters in project path | HTTP header UTF-8 encoding error | Move project to an ASCII-only path (e.g., `D:\projects\`) |
+
+Set API key via environment variable:
+
+```bash
+export OPENAI_API_KEY="your-key-here"
+```
+
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | `codex: command not found` | Install Codex CLI: `npm install -g @openai/codex` |
 | `401 Unauthorized` | Set `OPENAI_API_KEY` environment variable |
+| 404 `/api/responses` | Check `base_url` has correct path suffix; ensure `wire_api = "responses"` |
+| `model_provider not found` | Use a custom provider name with `[model_providers.xxx]` section |
+| Chinese path UTF-8 error | Move project to ASCII-only path |
 | Plugin not loading | Check `installed_plugins.json` path is correct and absolute |
 | `/codex` command not recognized | Verify `commands/codex.md` exists and restart Claude Code |
 | Scripts fail with permission error | Run `chmod +x ~/.claude/plugins/codex-delegate/scripts/*.sh` |
