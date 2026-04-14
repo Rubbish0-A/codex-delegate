@@ -55,7 +55,7 @@ echo "Instructions: $PROMPT"
 echo "========================="
 echo ""
 
-codex review $REVIEW_FLAGS "$PROMPT" 2>&1
+codex review $REVIEW_FLAGS "$PROMPT" < /dev/null 2>&1
 EXIT_CODE=$?
 
 echo ""

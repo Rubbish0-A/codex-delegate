@@ -68,7 +68,7 @@ echo "Prompt: $PROMPT"
 echo "=============================="
 echo ""
 
-codex exec $FLAGS -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" 2>&1
+codex exec $FLAGS -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" < /dev/null 2>&1
 EXIT_CODE=$?
 
 echo ""
