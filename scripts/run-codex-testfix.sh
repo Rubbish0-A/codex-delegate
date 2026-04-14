@@ -7,13 +7,33 @@ set -euo pipefail
 #   max_rounds: maximum fix attempts (default: 3)
 #   focus_hint: optional hint about which files/modules to focus on
 
+# ── Pre-flight: Codex CLI Check ──────────────────────────────
+if ! command -v codex &>/dev/null; then
+  echo "[ERROR] codex CLI not found. Install: npm install -g @openai/codex"
+  exit 1
+fi
+
 WORKDIR="${1:-.}"
 TEST_CMD="${2:?Error: test command is required (e.g., 'npm test', 'pytest')}"
 MAX_ROUNDS="${3:-3}"
 FOCUS="${4:-}"
+CODEX_TIMEOUT="${CODEX_TIMEOUT:-600}"
 
 OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-XXXXXX.md")
 STASHED=false
+SCRIPT_COMPLETED=false
+
+# ── Cleanup on exit (normal or interrupted) ──────────────────
+cleanup() {
+  rm -f "$OUTPUT_FILE" 2>/dev/null
+  if [ "$SCRIPT_COMPLETED" = false ] && [ "$STASHED" = true ]; then
+    echo ""
+    echo "=== INTERRUPTED — STASH WARNING ==="
+    echo "[WARN] Script was interrupted. Your changes are saved in git stash."
+    echo "To restore: cd \"$WORKDIR\" && git stash pop"
+  fi
+}
+trap cleanup EXIT
 
 cd "$WORKDIR"
 
@@ -72,16 +92,20 @@ Rules:
   - Suggested next steps for the developer"
 
 # ── Execute ───────────────────────────────────────────────────
-FLAGS="--ephemeral --full-auto"
+FLAGS=(--ephemeral --full-auto)
 if [ "$IS_GIT" = false ]; then
-  FLAGS="$FLAGS --skip-git-repo-check"
+  FLAGS+=(--skip-git-repo-check)
 fi
 
 echo "=== Starting Test-Fix (max $MAX_ROUNDS rounds) ==="
 echo ""
 
-codex exec $FLAGS -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" < /dev/null 2>&1
+timeout "$CODEX_TIMEOUT" codex exec "${FLAGS[@]}" -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" < /dev/null 2>&1
 EXIT_CODE=$?
+
+if [ "$EXIT_CODE" -eq 124 ]; then
+  echo "[ERROR] Codex test-fix timed out after ${CODEX_TIMEOUT}s. Set CODEX_TIMEOUT env var to increase."
+fi
 
 echo ""
 
@@ -92,7 +116,6 @@ if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
 else
   echo "(No final response captured)"
 fi
-rm -f "$OUTPUT_FILE"
 
 echo ""
 
@@ -133,4 +156,5 @@ fi
 echo ""
 echo "=== TEST-FIX EXIT CODE: $EXIT_CODE ==="
 
+SCRIPT_COMPLETED=true
 exit $EXIT_CODE

@@ -6,12 +6,32 @@ set -euo pipefail
 #   working_dir: absolute path to project root
 #   prompt: task description for Codex
 
+# ── Pre-flight: Codex CLI Check ──────────────────────────────
+if ! command -v codex &>/dev/null; then
+  echo "[ERROR] codex CLI not found. Install: npm install -g @openai/codex"
+  exit 1
+fi
+
 MODE="${1:-full-auto}"
 WORKDIR="${2:-.}"
 PROMPT="${3:?Error: prompt is required}"
+CODEX_TIMEOUT="${CODEX_TIMEOUT:-300}"
 
 OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-output-XXXXXX.md")
 STASHED=false
+SCRIPT_COMPLETED=false
+
+# ── Cleanup on exit (normal or interrupted) ──────────────────
+cleanup() {
+  rm -f "$OUTPUT_FILE" 2>/dev/null
+  if [ "$SCRIPT_COMPLETED" = false ] && [ "$STASHED" = true ]; then
+    echo ""
+    echo "=== INTERRUPTED — STASH WARNING ==="
+    echo "[WARN] Script was interrupted. Your changes are saved in git stash."
+    echo "To restore: cd \"$WORKDIR\" && git stash pop"
+  fi
+}
+trap cleanup EXIT
 
 cd "$WORKDIR"
 
@@ -42,22 +62,22 @@ fi
 echo ""
 
 # ── Execute Codex ─────────────────────────────────────────────
-FLAGS="--ephemeral"
+FLAGS=(--ephemeral)
 
 # Non-git directories need skip flag
 if [ "$IS_GIT" = false ]; then
-  FLAGS="$FLAGS --skip-git-repo-check"
+  FLAGS+=(--skip-git-repo-check)
 fi
 
 case "$MODE" in
   full-auto)
-    FLAGS="$FLAGS --full-auto"
+    FLAGS+=(--full-auto)
     ;;
   read-only)
-    FLAGS="$FLAGS --full-auto -s read-only"
+    FLAGS+=(--full-auto -s read-only)
     ;;
   *)
-    FLAGS="$FLAGS --full-auto"
+    FLAGS+=(--full-auto)
     ;;
 esac
 
@@ -68,8 +88,12 @@ echo "Prompt: $PROMPT"
 echo "=============================="
 echo ""
 
-codex exec $FLAGS -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" < /dev/null 2>&1
+timeout "$CODEX_TIMEOUT" codex exec "${FLAGS[@]}" -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" < /dev/null 2>&1
 EXIT_CODE=$?
+
+if [ "$EXIT_CODE" -eq 124 ]; then
+  echo "[ERROR] Codex timed out after ${CODEX_TIMEOUT}s. Set CODEX_TIMEOUT env var to increase."
+fi
 
 echo ""
 
@@ -80,7 +104,6 @@ if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
 else
   echo "(No final response captured)"
 fi
-rm -f "$OUTPUT_FILE"
 
 echo ""
 
@@ -124,4 +147,5 @@ fi
 echo ""
 echo "=== CODEX EXIT CODE: $EXIT_CODE ==="
 
+SCRIPT_COMPLETED=true
 exit $EXIT_CODE
