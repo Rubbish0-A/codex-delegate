@@ -8,6 +8,8 @@
 
 > Zero dependencies. Pure Bash. Git-safe. Battle-tested on Windows.
 
+**English** | [中文](README.zh-CN.md)
+
 Claude thinks. Codex executes. Neither steps on the other's work.
 
 ---
