@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="codex-delegate banner" width="100%">
+</p>
+
 # codex-delegate
 
 **The lightweight Claude Code + Codex CLI collaboration plugin.**
