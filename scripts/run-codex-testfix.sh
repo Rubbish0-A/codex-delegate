@@ -2,14 +2,17 @@
 set -euo pipefail
 
 # Usage: run-codex-testfix.sh <working_dir> <test_command> [max_rounds] [focus_hint]
-#   working_dir: absolute path to project root
-#   test_command: the test command to run (e.g., "npm test", "pytest", "go test ./...")
-#   max_rounds: maximum fix attempts (default: 3)
-#   focus_hint: optional hint about which files/modules to focus on
+#
+# Token-economy design (v1.5.0):
+# testfix is the HEAVIEST script — N rounds of test output flow through Codex's stdout.
+# Keeping 2>&1 here would be catastrophic for Claude's context.
+#   - `-o OUTPUT_FILE`: final structured report (what Claude sees)
+#   - stdout (full test runs + reasoning): → STDOUT_LOG, discarded on success
+#   - stderr (diagnostics): → STDERR_LOG, tail-dumped only on failure
 
-# ── Pre-flight: Codex CLI Check ──────────────────────────────
+# ── Pre-flight ───────────────────────────────────────────────
 if ! command -v codex &>/dev/null; then
-  echo "[ERROR] codex CLI not found. Install: npm install -g @openai/codex"
+  echo "[ERROR] codex CLI not found. Install: npm install -g @openai/codex" >&2
   exit 1
 fi
 
@@ -18,56 +21,42 @@ TEST_CMD="${2:?Error: test command is required (e.g., 'npm test', 'pytest')}"
 MAX_ROUNDS="${3:-3}"
 FOCUS="${4:-}"
 CODEX_TIMEOUT="${CODEX_TIMEOUT:-600}"
+CODEX_VERBOSE="${CODEX_VERBOSE:-0}"
 
 OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-XXXXXX.md")
+STDOUT_LOG=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-stdout-XXXXXX.log")
+STDERR_LOG=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-stderr-XXXXXX.log")
 STASHED=false
 SCRIPT_COMPLETED=false
 
-# ── Cleanup on exit (normal or interrupted) ──────────────────
 cleanup() {
-  rm -f "$OUTPUT_FILE" 2>/dev/null
+  rm -f "$OUTPUT_FILE" "$STDOUT_LOG" "$STDERR_LOG" 2>/dev/null
   if [ "$SCRIPT_COMPLETED" = false ] && [ "$STASHED" = true ]; then
-    echo ""
-    echo "=== INTERRUPTED — STASH WARNING ==="
-    echo "[WARN] Script was interrupted. Your changes are saved in git stash."
-    echo "To restore: cd \"$WORKDIR\" && git stash pop"
+    echo "" >&2
+    echo "=== INTERRUPTED — STASH WARNING ===" >&2
+    echo "[WARN] Changes saved in git stash. Restore: cd \"$WORKDIR\" && git stash pop" >&2
   fi
 }
 trap cleanup EXIT
 
 cd "$WORKDIR"
 
-# ── Pre-flight ────────────────────────────────────────────────
-echo "=== Codex Test-Fix Cycle ==="
-echo "Working Dir: $WORKDIR"
-echo "Test Command: $TEST_CMD"
-echo "Max Rounds: $MAX_ROUNDS"
-if [ -n "$FOCUS" ]; then
-  echo "Focus: $FOCUS"
-fi
-echo "============================="
-echo ""
-
+# ── Pre-flight: git safety (silent on clean tree) ────────────
 IS_GIT=false
+HEAD_BEFORE=""
 if git rev-parse --is-inside-work-tree &>/dev/null; then
   IS_GIT=true
   if ! git diff --quiet HEAD 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-    echo "[WARN] Uncommitted changes detected. Auto-stashing..."
-    git stash push -m "codex-testfix-auto-stash-$(date +%s)" --include-untracked
+    echo "[INFO] Uncommitted changes detected. Auto-stashing..."
+    git stash push -m "codex-testfix-auto-stash-$(date +%s)" --include-untracked >/dev/null
     STASHED=true
-    echo "[OK] Changes stashed safely."
   fi
   HEAD_BEFORE=$(git rev-parse HEAD)
-  echo "[OK] HEAD before test-fix: ${HEAD_BEFORE:0:8}"
 fi
 
-echo ""
-
-# ── Build prompt ──────────────────────────────────────────────
+# ── Build prompt ─────────────────────────────────────────────
 FOCUS_CLAUSE=""
-if [ -n "$FOCUS" ]; then
-  FOCUS_CLAUSE="Focus on these files/modules: $FOCUS."
-fi
+[ -n "$FOCUS" ] && FOCUS_CLAUSE="Focus on these files/modules: $FOCUS."
 
 PROMPT="Run the test suite with: $TEST_CMD
 
@@ -85,76 +74,76 @@ $FOCUS_CLAUSE
 Rules:
 - Do NOT modify test files unless they contain clear bugs (wrong assertions, typos)
 - Do NOT skip or delete failing tests
-- If after $MAX_ROUNDS rounds some tests still fail, STOP and report:
-  - Which tests still fail
-  - What you tried
-  - Your diagnosis of why they fail
-  - Suggested next steps for the developer"
+- If after $MAX_ROUNDS rounds some tests still fail, STOP and report.
 
-# ── Execute ───────────────────────────────────────────────────
-FLAGS=(--ephemeral --full-auto)
-if [ "$IS_GIT" = false ]; then
-  FLAGS+=(--skip-git-repo-check)
-fi
+---
+Final report format (keep concise, under 400 words):
+- Result: PASS | PARTIAL | FAIL
+- Rounds used: N / $MAX_ROUNDS
+- Passed / failed test counts (from final run)
+- Files modified: <list, one per line>
+- Remaining failures (if any): <test name> — <one-line diagnosis>
+- Next steps for developer (only if PARTIAL or FAIL)
 
-echo "=== Starting Test-Fix (max $MAX_ROUNDS rounds) ==="
-echo ""
+Do NOT include full test output, stack traces, or per-round narration — those are already visible in the event log if needed."
 
-timeout "$CODEX_TIMEOUT" codex exec "${FLAGS[@]}" -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" < /dev/null 2>&1
-EXIT_CODE=$?
+# ── Execute ──────────────────────────────────────────────────
+FLAGS=(--ephemeral --full-auto --color never)
+[ "$IS_GIT" = false ] && FLAGS+=(--skip-git-repo-check)
 
-if [ "$EXIT_CODE" -eq 124 ]; then
-  echo "[ERROR] Codex test-fix timed out after ${CODEX_TIMEOUT}s. Set CODEX_TIMEOUT env var to increase."
-fi
+EXIT_CODE=0
+timeout "$CODEX_TIMEOUT" codex exec "${FLAGS[@]}" -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" \
+  < /dev/null > "$STDOUT_LOG" 2> "$STDERR_LOG" \
+  || EXIT_CODE=$?
 
-echo ""
-
-# ── Results ───────────────────────────────────────────────────
+# ── Output ───────────────────────────────────────────────────
 echo "=== CODEX TEST-FIX RESULT ==="
-if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
+if [ -s "$OUTPUT_FILE" ]; then
   cat "$OUTPUT_FILE"
 else
   echo "(No final response captured)"
 fi
-
 echo ""
 
-# ── Post-flight ───────────────────────────────────────────────
+if [ "$EXIT_CODE" -ne 0 ]; then
+  echo "=== CODEX TEST-FIX FAILURE (exit $EXIT_CODE) ==="
+  if [ "$EXIT_CODE" -eq 124 ]; then
+    echo "[TIMEOUT] Exceeded ${CODEX_TIMEOUT}s. Set CODEX_TIMEOUT to increase."
+  fi
+  echo "--- stderr (last 80 lines) ---"
+  tail -n 80 "$STDERR_LOG" 2>/dev/null || echo "(empty)"
+  echo "--- stdout (last 40 lines) ---"
+  tail -n 40 "$STDOUT_LOG" 2>/dev/null || echo "(empty)"
+  echo ""
+elif [ "$CODEX_VERBOSE" = "1" ]; then
+  echo "=== CODEX STDOUT (verbose mode) ==="
+  cat "$STDOUT_LOG"
+  echo ""
+fi
+
+# ── Post-flight ──────────────────────────────────────────────
 if [ "$IS_GIT" = true ]; then
-  echo "=== FILES CHANGED BY CODEX ==="
   DIFF_OUTPUT=$(git diff --stat 2>/dev/null || true)
   UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null || true)
 
-  if [ -n "$DIFF_OUTPUT" ]; then
-    echo "$DIFF_OUTPUT"
-  fi
-  if [ -n "$UNTRACKED" ]; then
-    echo ""
-    echo "New files:"
-    echo "$UNTRACKED"
-  fi
-  if [ -z "$DIFF_OUTPUT" ] && [ -z "$UNTRACKED" ]; then
-    echo "(No file changes detected)"
-  fi
-
-  echo ""
-
   if [ -n "$DIFF_OUTPUT" ] || [ -n "$UNTRACKED" ]; then
-    echo "=== ROLLBACK INFO ==="
-    echo "To undo all fixes: git checkout -- . && git clean -fd"
-    echo "HEAD before test-fix: $HEAD_BEFORE"
+    echo "=== FILES CHANGED ==="
+    [ -n "$DIFF_OUTPUT" ] && echo "$DIFF_OUTPUT"
+    if [ -n "$UNTRACKED" ]; then
+      echo "New files:"
+      echo "$UNTRACKED"
+    fi
+    echo ""
+    echo "=== ROLLBACK ==="
+    echo "git reset --hard $HEAD_BEFORE && git clean -fd"
   fi
 
   if [ "$STASHED" = true ]; then
     echo ""
-    echo "=== STASH RESTORE ==="
-    echo "[INFO] Prior changes were auto-stashed."
-    echo "To restore: git stash pop"
+    echo "[STASH] Prior changes stashed. Review diff, then: git stash pop"
   fi
 fi
 
-echo ""
-echo "=== TEST-FIX EXIT CODE: $EXIT_CODE ==="
-
+echo "=== EXIT: $EXIT_CODE ==="
 SCRIPT_COMPLETED=true
 exit $EXIT_CODE

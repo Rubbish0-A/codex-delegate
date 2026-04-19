@@ -8,7 +8,7 @@ description: >-
   Codex CLI would provide clear value — such as post-development cross review,
   test-fix cycles, bug diagnosis, batch file modifications, or precise
   code micro-adjustments during design discussions.
-version: 1.4.2
+version: 1.5.0
 ---
 
 # Delegate to Codex
@@ -138,6 +138,25 @@ Always let the user decide. Never auto-delegate without awareness and consent.
 ### Step 1: Prepare a Scoped Prompt
 
 Write a clear, self-contained prompt: specific files, exact changes, constraints, what NOT to change. See **`references/workflow-patterns.md`** for templates.
+
+#### Prompt Economy (token-cost awareness)
+
+The whole value proposition of this plugin is **Codex's internal reasoning does not occupy Claude's context window** — only the `-o FILE` final response flows back. As of v1.5.0 the scripts already enforce this at the IO layer (stdout/stderr redirected, silent on success, tail-dumped on failure).
+
+But the `-o FILE` payload is shaped by **your prompt**. Default the prompt toward concise, structured output:
+
+- **Bad**: `"Refactor the auth module."` → Codex writes multi-paragraph narrative of every change.
+- **Good**: `"Refactor auth module per the plan in step 1. Final report: file:line of each change + one-sentence rationale. No per-file narration."`
+- **Also good**: `"Find all callers of deprecated func X. Report only: file path + line number + calling expression. Under 200 words total."`
+
+The `run-codex-task.sh` script already appends a generic "under 300 words" constraint, but your task-specific shape beats that every time. For reviews, force `[SEVERITY] file:line — issue (fix)` format. For diagnosis, force "root cause in ≤3 sentences + suggested fix location." For test-fix, the script already enforces the final-report schema.
+
+#### When to ask for more verbosity
+
+Override the default terseness when:
+- User explicitly asked for a detailed walkthrough ("explain what Codex did")
+- Task is a novel analysis where the reasoning chain is the deliverable
+- Set `CODEX_VERBOSE=1` env var to also dump the full stdout event stream (normally suppressed)
 
 ### Step 2: Choose Collaboration Mode
 
