@@ -1,14 +1,13 @@
 ---
 name: delegate-to-codex
 description: >-
-  This skill should be used when the user asks to "delegate to codex",
-  "let codex handle this", "交给codex", "让codex做", "让codex改",
-  "让codex实现", "codex来处理", "用codex修", "codex review", "让codex跑测试",
-  "codex查一下这个bug", "交叉审查", or when Claude identifies a task where
-  Codex CLI would provide clear value — such as post-development cross review,
-  test-fix cycles, bug diagnosis, batch file modifications, or precise
-  code micro-adjustments during design discussions.
-version: 1.5.0
+  Use when the user explicitly asks for Codex ("交给 codex", "用 codex 改",
+  "codex review", "delegate to codex", "let codex handle this"), or when
+  Claude identifies clear value in offloading to Codex CLI: precise
+  micro-edits, batch refactors across 5+ files, iterative test-fix cycles,
+  post-implementation cross review, or read-only bug diagnosis. Codex runs
+  as a subprocess; its reasoning stays out of Claude's context window.
+version: 1.6.1
 ---
 
 # Delegate to Codex
@@ -73,13 +72,16 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh "read-only" "<dir>" "<diagn
 5. **Iterative test-fix cycles** — Run tests, read errors, fix code, repeat
 6. **Claude identifies Codex advantage** — Task where Codex would be more precise
 
-### When NOT to Delegate
+### When Codex Is Likely Not the Right Tool
 
-- Architecture and design discussions — Claude's strength
-- Tasks requiring deep cross-file context understanding
-- Simple changes Claude handles directly in one edit
-- User has not expressed interest in using Codex
-- Anything involving secrets, credentials, or deployment
+These are **hints**, not blockers. If the user explicitly asks for Codex, **delegate anyway** — they own the decision.
+
+- Architecture/design discussions where reasoning > execution → Claude is usually faster
+- Single-line edits Claude can do in one Edit call → no value in spinning up subprocess
+- Tasks involving raw credentials/secrets handling → keep in Claude's controlled context
+- User hasn't mentioned Codex and the change is trivial → suggest Codex only when value is clear
+
+If unsure, **delegate**. The token cost is bounded (see Prompt Economy section), and Claude reviews the diff afterward.
 
 ## Conflict Prevention (CRITICAL)
 
@@ -203,6 +205,86 @@ If Codex fails (non-zero exit code):
 If Codex produces incorrect changes:
 1. Rollback: `git checkout -- . && git clean -fd`
 2. Re-attempt with clearer prompt, or handle directly
+
+## Model & Effort Configuration (v1.6.0+)
+
+All three scripts now **explicitly lock the model and effort level** at invocation time. The values are no longer silently inherited from `~/.codex/config.toml`.
+
+### Defaults
+
+| Script | Model | Effort | Rationale |
+|--------|-------|--------|-----------|
+| `run-codex-task.sh` | `gpt-5.5` | `xhigh` | Standard execution baseline |
+| `run-codex-review.sh` | `gpt-5.5` | `max` | Diagnostic depth > speed for reviews |
+| `run-codex-testfix.sh` | `gpt-5.5` | `xhigh` | Multiple iteration rounds, balance depth and time |
+
+### Environment Variable Overrides
+
+```bash
+CODEX_MODEL="gpt-5.5"       # Override the model (default: gpt-5.5)
+CODEX_EFFORT="xhigh"        # Override reasoning effort (default per-script)
+CODEX_PROFILE="<name>"      # Use a profile from ~/.codex/config.toml
+CODEX_ADD_DIR="<path>"      # Additional writable directory (monorepo)
+CODEX_TIMEOUT=300           # Seconds before timeout (default: 300/600)
+CODEX_VERBOSE=1             # Dump suppressed stdout event stream
+CODEX_BYPASS_SANDBOX=1      # Force sandbox bypass (default: 1 on Windows, 0 elsewhere)
+```
+
+### Windows Sandbox Bypass (v1.6.1+)
+
+**Problem**: codex-cli 0.128.0+ has a Windows-specific bug where every PowerShell subprocess spawn fails with:
+
+```
+ERROR codex_core::exec: exec error: windows sandbox: spawn setup refresh
+```
+
+Codex falls back to `apply patch` for writes (so files do get created), but every verification step retries the broken sandbox spawn — accumulating timeouts until the script hits its 300s deadline with EXIT 124. The bug is identical to the V1.3-era report and has not been fixed upstream.
+
+**Fix (automatic on Windows)**: scripts detect `OSTYPE=msys*|cygwin*|win32*` or `OS=Windows_NT` and replace `-s workspace-write` with `--dangerously-bypass-approvals-and-sandbox`. Codex runs PowerShell directly without the broken sandbox layer.
+
+**Safety net retained**: 
+- Claude's git auto-stash + `HEAD_BEFORE` rollback still applies — Codex misbehavior is recoverable.
+- All delegations still go through Cautious Mode (read-only proposal → Claude review → execute) by default.
+- The "danger" of `--dangerously-bypass-approvals-and-sandbox` on Windows is largely nominal since the sandbox it bypasses was broken anyway.
+
+**Override the default**:
+```bash
+CODEX_BYPASS_SANDBOX=0 bash run-codex-task.sh ...  # Force workspace-write on Windows
+CODEX_BYPASS_SANDBOX=1 bash run-codex-task.sh ...  # Force bypass on Linux/macOS
+```
+
+**Other platforms (Linux/macOS)**: sandbox works correctly; bypass stays off by default. Don't enable unless you have a specific reason.
+
+### Banner Output (verifiability)
+
+Every invocation now prints a banner before execution:
+
+```
+=== CODEX DELEGATION ===
+Model:    gpt-5.5
+Effort:   xhigh
+Mode:     full-auto
+Timeout:  300s
+Workdir:  /path/to/project
+```
+
+If you don't see the banner, the script didn't run. If the model shown is wrong, the env var or script is being overridden somewhere — investigate before proceeding.
+
+## Diagnosis Mode Prompt Template
+
+When delegating a read-only bug analysis (Diagnosis Mode), use this template to constrain the output shape:
+
+```
+<!-- TODO: User fills in their preferred diagnosis prompt template here -->
+<!-- Suggested structure (you decide the exact wording):
+     - What the bug looks like (symptom)
+     - Reproduction context (when it happens)
+     - What output format you want back (root cause? affected files? fix suggestion?)
+     - Response length constraint
+-->
+```
+
+Until you customize this, the script falls back to your raw prompt + the auto-appended "under 300 words" constraint.
 
 ## Additional Resources
 

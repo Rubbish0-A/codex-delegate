@@ -24,6 +24,22 @@ WORKDIR="${2:-.}"
 PROMPT="${3:?Error: prompt is required}"
 CODEX_TIMEOUT="${CODEX_TIMEOUT:-300}"
 CODEX_VERBOSE="${CODEX_VERBOSE:-0}"
+CODEX_MODEL="${CODEX_MODEL:-gpt-5.5}"
+CODEX_EFFORT="${CODEX_EFFORT:-xhigh}"
+CODEX_PROFILE="${CODEX_PROFILE:-}"
+CODEX_ADD_DIR="${CODEX_ADD_DIR:-}"
+
+# ── OS detection: Windows triggers sandbox bypass by default ────
+# Background: codex-cli 0.128.0+ has a "windows sandbox: spawn setup refresh"
+# bug — every PowerShell subprocess spawn fails. Codex falls back to apply-patch
+# for writes but verification steps timeout. Bypass avoids the broken sandbox layer.
+# Other OSes (Linux/macOS): keep workspace-write sandbox (it actually works there).
+IS_WINDOWS=false
+case "${OSTYPE:-}" in msys*|cygwin*|win32*) IS_WINDOWS=true ;; esac
+[ "${OS:-}" = "Windows_NT" ] && IS_WINDOWS=true
+DEFAULT_BYPASS=0
+[ "$IS_WINDOWS" = true ] && DEFAULT_BYPASS=1
+CODEX_BYPASS_SANDBOX="${CODEX_BYPASS_SANDBOX:-$DEFAULT_BYPASS}"
 
 OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-output-XXXXXX.md")
 STDOUT_LOG=$(mktemp "${TMPDIR:-/tmp}/codex-stdout-XXXXXX.log")
@@ -58,13 +74,41 @@ if git rev-parse --is-inside-work-tree &>/dev/null; then
 fi
 
 # ── Build flags ──────────────────────────────────────────────
-FLAGS=(--ephemeral --color never)
+# Note: --full-auto deprecated in codex-cli 0.128.0+ → replaced with explicit
+# -s workspace-write (or -s read-only). bypass takes precedence over -s.
+FLAGS=(--ephemeral --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"")
+[ -n "$CODEX_PROFILE" ] && FLAGS+=(-p "$CODEX_PROFILE")
+[ -n "$CODEX_ADD_DIR" ] && FLAGS+=(--add-dir "$CODEX_ADD_DIR")
 [ "$IS_GIT" = false ] && FLAGS+=(--skip-git-repo-check)
 
+SANDBOX_LABEL=""
 case "$MODE" in
-  read-only) FLAGS+=(--full-auto -s read-only) ;;
-  full-auto|*) FLAGS+=(--full-auto) ;;
+  read-only)
+    FLAGS+=(-s read-only)
+    SANDBOX_LABEL="read-only"
+    ;;
+  full-auto|*)
+    if [ "$CODEX_BYPASS_SANDBOX" = "1" ]; then
+      FLAGS+=(--dangerously-bypass-approvals-and-sandbox)
+      SANDBOX_LABEL="bypassed (Windows default — set CODEX_BYPASS_SANDBOX=0 to disable)"
+    else
+      FLAGS+=(-s workspace-write)
+      SANDBOX_LABEL="workspace-write"
+    fi
+    ;;
 esac
+
+# ── Banner: visible model/effort/mode (so user can verify) ───
+echo "=== CODEX DELEGATION ==="
+echo "Model:    $CODEX_MODEL"
+echo "Effort:   $CODEX_EFFORT"
+echo "Mode:     $MODE"
+echo "Sandbox:  $SANDBOX_LABEL"
+echo "Timeout:  ${CODEX_TIMEOUT}s"
+[ -n "$CODEX_PROFILE" ] && echo "Profile:  $CODEX_PROFILE"
+[ -n "$CODEX_ADD_DIR" ] && echo "AddDir:   $CODEX_ADD_DIR"
+echo "Workdir:  $WORKDIR"
+echo ""
 
 # ── Prompt length constraint (always appended) ───────────────
 # Rationale: Codex's default final-response length often blows past what Claude needs.

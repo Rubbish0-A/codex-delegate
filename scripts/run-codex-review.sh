@@ -18,6 +18,10 @@ WORKDIR="${1:-.}"
 shift || true
 CODEX_TIMEOUT="${CODEX_TIMEOUT:-300}"
 CODEX_VERBOSE="${CODEX_VERBOSE:-0}"
+CODEX_MODEL="${CODEX_MODEL:-gpt-5.5}"
+# Review tasks default to max effort: depth > speed for diagnostic work.
+CODEX_EFFORT="${CODEX_EFFORT:-max}"
+CODEX_PROFILE="${CODEX_PROFILE:-}"
 
 OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-review-XXXXXX.md")
 STDOUT_LOG=$(mktemp "${TMPDIR:-/tmp}/codex-review-stdout-XXXXXX.log")
@@ -46,7 +50,8 @@ done
 cd "$WORKDIR"
 
 # ── Build flags ──────────────────────────────────────────────
-REVIEW_FLAGS=(--ephemeral --color never)
+REVIEW_FLAGS=(--ephemeral --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"")
+[ -n "$CODEX_PROFILE" ] && REVIEW_FLAGS+=(-p "$CODEX_PROFILE")
 if [ -n "$BASE_BRANCH" ]; then
   REVIEW_FLAGS+=(--base "$BASE_BRANCH")
   REVIEW_SCOPE="against base: $BASE_BRANCH"
@@ -58,6 +63,16 @@ else
   REVIEW_SCOPE="uncommitted changes"
 fi
 
+# ── Banner ───────────────────────────────────────────────────
+echo "=== CODEX REVIEW ==="
+echo "Model:    $CODEX_MODEL"
+echo "Effort:   $CODEX_EFFORT"
+echo "Scope:    $REVIEW_SCOPE"
+echo "Timeout:  ${CODEX_TIMEOUT}s"
+[ -n "$CODEX_PROFILE" ] && echo "Profile:  $CODEX_PROFILE"
+echo "Workdir:  $WORKDIR"
+echo ""
+
 # ── Execute ──────────────────────────────────────────────────
 EXIT_CODE=0
 timeout "$CODEX_TIMEOUT" codex review "${REVIEW_FLAGS[@]}" -o "$OUTPUT_FILE" "$PROMPT" \
@@ -65,7 +80,7 @@ timeout "$CODEX_TIMEOUT" codex review "${REVIEW_FLAGS[@]}" -o "$OUTPUT_FILE" "$P
   || EXIT_CODE=$?
 
 # ── Output ───────────────────────────────────────────────────
-echo "=== CODEX REVIEW ($REVIEW_SCOPE) ==="
+echo "=== CODEX REVIEW REPORT ==="
 if [ -s "$OUTPUT_FILE" ]; then
   cat "$OUTPUT_FILE"
 else

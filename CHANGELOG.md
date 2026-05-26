@@ -3,6 +3,48 @@
 All notable changes to codex-delegate are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.1] — 2026-05-26
+
+### Fixed
+- **Windows sandbox spawn bug — auto-bypass on Windows**. codex-cli 0.128.0+ on Windows fails every PowerShell subprocess spawn with `ERROR codex_core::exec: exec error: windows sandbox: spawn setup refresh`. Files get created via apply-patch fallback, but every verification step retries the broken sandbox layer, accumulating timeouts until EXIT 124. This is the same error pattern from the V1.3 era — not a regression here, an unfixed upstream issue. Fix: `run-codex-task.sh` and `run-codex-testfix.sh` now detect `OSTYPE=msys*|cygwin*|win32*` or `OS=Windows_NT` and replace `-s workspace-write` with `--dangerously-bypass-approvals-and-sandbox`. The bypassed "sandbox" is one that was broken anyway; safety is retained via Claude's git auto-stash + rollback layer.
+
+### Changed
+- **Replaced deprecated `--full-auto`** with explicit `-s workspace-write` (or `-s read-only`). codex-cli 0.128.0+ prints `warning: --full-auto is deprecated; use --sandbox workspace-write instead.` Scripts now use the modern flag; future codex releases that drop `--full-auto` won't break.
+- **`run-codex-review.sh` left untouched** — `codex review` is read-only, doesn't spawn PowerShell sandboxes, not affected by the Windows bug.
+
+### Added
+- **`CODEX_BYPASS_SANDBOX` env var**: forces or disables the sandbox bypass. Default: `1` on Windows, `0` elsewhere. Set explicitly to override OS detection.
+- **`Sandbox:` line in banner output**: displays `workspace-write` / `read-only` / `bypassed (Windows default …)` per invocation. Users can visually confirm which sandbox mode ran.
+- **New SKILL.md section "Windows Sandbox Bypass (v1.6.1+)"**: documents the upstream bug, the fix, the safety reasoning, and override examples.
+
+---
+
+## [1.6.0] — 2026-05-24
+
+### Added
+- **Explicit model & effort locking** across all three scripts. Every invocation now passes `-m "$CODEX_MODEL"` (default `gpt-5.5`) and `-c model_reasoning_effort="$CODEX_EFFORT"` (default `xhigh` for task/testfix, `max` for review). No more silent inheritance from `~/.codex/config.toml` — any environment-level drift is now visible at the script boundary.
+- **Banner output** at the start of every invocation: prints model, effort, mode, timeout, workdir, profile (if set), add-dir (if set). Lets the user visually verify what's about to run before Codex starts reasoning. Symptom-driven: prior versions had no way for the user to confirm which model was being used.
+- **`CODEX_PROFILE` env var**: pass through `-p <profile>` to switch among configurations in `~/.codex/config.toml` (e.g., separate API key + model combos for different clients).
+- **`CODEX_ADD_DIR` env var**: pass through `--add-dir <path>` for monorepo scenarios where Codex needs write access beyond the primary workspace.
+- **Diagnosis Mode prompt template scaffold** in SKILL.md: TODO placeholder for user to fill in their preferred bug-diagnosis output shape.
+- New SKILL.md section **"Model & Effort Configuration"**: documents defaults table, env var overrides, and banner output as a verifiability tool.
+
+### Changed
+- **SKILL.md `description` rewritten from keyword-list to semantic-trigger style**. Prior version stacked 10+ Chinese/English trigger phrases inside `description:`, which Claude interprets as a keyword list rather than a semantic intent description — diluting trigger reliability. New form: a single coherent sentence describing scenarios where delegation adds value, with 5 representative trigger phrases.
+- **"When NOT to Delegate" loosened from hard blockers to soft hints**. Prior version had 5 strict refusal conditions ("Architecture/design discussions", "Tasks requiring deep cross-file context", etc.) that Claude would self-apply to refuse delegation even when the user explicitly asked. v1.6.0: if the user explicitly asks for Codex, delegate. Hints remain to flag cases where Codex offers little value — but they are no longer veto.
+- **`/codex` slash command consolidated as explicit entry → skill**. Prior versions had two parallel routing paths (slash command + skill) with subtly different behavior; the command file now declares it routes through the skill. Single source of truth for collaboration logic.
+- **`plugin.json` version sync**: bumped to 1.6.0 (was stuck at 1.4.2 even after SKILL bumped to 1.5.0 — version drift fixed).
+- **`run-codex-review.sh` default effort upgraded to `max`** (was `xhigh` via inherited config). Reasoning: review is diagnostic; depth matters more than throughput. User can still override via `CODEX_EFFORT=xhigh` if cost-sensitive.
+
+### Fixed
+- **Trigger reliability**: combined effect of description rewrite + loosened refusal conditions targets the "skill won't trigger" symptom reported by the user. Prior keyword-list form made Claude treat trigger phrases as literal-match rules, causing both false negatives (semantic asks for delegation not matching exact phrases) and false positives (delegation refused due to over-strict "When NOT to Delegate" conditions).
+- **Model drift**: explicit `-m` flag eliminates the silent fallback to whatever `model = ...` happens to be in `~/.codex/config.toml`. If a profile or another tool changes the global default, scripts here are unaffected.
+
+### Token cost impact
+- Banner output adds ~50-80 tokens per invocation to Claude's view. Negligible vs the 400-800 token v1.5.0 baseline and the ~10-30× reduction it already delivered.
+
+---
+
 ## [1.5.0] — 2026-04-19
 
 ### Added
@@ -54,6 +96,8 @@ Conflict-prevention mechanism (three layers) and install documentation.
 ## [1.0.0] — 2026-04-08
 Initial release: on-demand delegation, `/codex` slash command, git safety checks.
 
+[1.6.1]: https://github.com/Rubbish0-A/codex-delegate/releases/tag/1.6.1
+[1.6.0]: https://github.com/Rubbish0-A/codex-delegate/releases/tag/1.6.0
 [1.5.0]: https://github.com/Rubbish0-A/codex-delegate/releases/tag/1.5.0
 [1.4.2]: https://github.com/Rubbish0-A/codex-delegate/releases/tag/1.4.2
 [1.4.0]: https://github.com/Rubbish0-A/codex-delegate/releases/tag/1.4.0

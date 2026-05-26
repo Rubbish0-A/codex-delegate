@@ -1,6 +1,6 @@
 ---
 name: codex
-description: Delegate a coding task to Codex CLI for execution
+description: Delegate a coding task to Codex CLI for execution (entry point — routes through delegate-to-codex skill)
 arguments:
   - name: task
     description: The task description or 'review' for code review mode
@@ -9,44 +9,33 @@ arguments:
 
 # /codex — Delegate Task to Codex
 
-Delegate a coding task to OpenAI Codex CLI. Codex executes the task non-interactively and returns results for review.
+This slash command is an **explicit entry point** to the `delegate-to-codex` skill. All execution logic — collaboration modes, prompt economy, banner output, git safety, model/effort locking — lives in the skill, not here.
 
-## Usage Patterns
+When invoked, Claude should:
 
-### Implementation / Fix / Refactor
+1. **Load the skill**: read `${CLAUDE_PLUGIN_ROOT}/skills/delegate-to-codex/SKILL.md` and follow its workflow.
+2. **Determine the task type** from `$ARGUMENTS`:
+   - Starts with `review` → use `run-codex-review.sh` (Cross Review pattern)
+   - Anything else → use `run-codex-task.sh` (Cautious or Quick Mode per user's phrasing)
+3. **Pick collaboration mode** per skill guidance:
+   - User said "直接做" / "快速模式" → Quick Mode
+   - User said "查一下" / "分析" → Diagnosis Mode (read-only)
+   - Default → Cautious Mode (read-only proposal → review → full-auto execute)
+4. **Use the banner output** (printed by every script) to verify model/effort/mode before proceeding.
+5. **Report results** in the user's language, summarizing what changed and Claude's verdict.
+
+## Usage Examples
 
 ```
-/codex <task description>
+/codex implement user registration endpoint with input validation
+/codex fix the failing tests in src/auth/
+/codex refactor all API handlers to use the new error handling pattern
+/codex review                                  # uncommitted changes
+/codex review check for SQL injection         # custom review focus
 ```
 
-Examples:
-- `/codex implement user registration endpoint with input validation`
-- `/codex fix the failing tests in src/auth/`
-- `/codex refactor all API handlers to use the new error handling pattern`
-- `/codex rename all instances of userId to user_id in the models directory`
+## Why This Indirection
 
-### Code Review
+Prior versions had two parallel routing paths (`/codex` and the skill) with subtly different behavior. v1.6.0 consolidates: the skill is the single source of truth; `/codex` is just an explicit user-facing entry, useful when the user wants to **force** delegation rather than let Claude judge.
 
-```
-/codex review [instructions]
-```
-
-Examples:
-- `/codex review` — Review uncommitted changes
-- `/codex review check for security vulnerabilities and SQL injection`
-
-## Execution Steps
-
-1. **Parse the task** — Determine if this is an implementation task or review
-2. **Prepare prompt** — Enhance the user's task with current project context (working directory, relevant files)
-3. **Execute Codex** — Run via helper script:
-   - Implementation: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-task.sh "full-auto" "<cwd>" "<prompt>"`
-   - Review: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/run-codex-review.sh "<cwd>" "<review_prompt>"`
-4. **Review results** — Check Codex output and `git diff` for changes
-5. **Report back** — Summarize results in the user's language, highlight any issues
-
-## Important
-
-- Always review Codex output before reporting success
-- If Codex fails, diagnose and either retry with a better prompt or handle directly
-- Communicate results in the user's language (auto-detect from conversation context)
+For the full collaboration model, prompt economy guidance, and decision tree, see the skill at `${CLAUDE_PLUGIN_ROOT}/skills/delegate-to-codex/SKILL.md`.

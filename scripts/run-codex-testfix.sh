@@ -22,6 +22,18 @@ MAX_ROUNDS="${3:-3}"
 FOCUS="${4:-}"
 CODEX_TIMEOUT="${CODEX_TIMEOUT:-600}"
 CODEX_VERBOSE="${CODEX_VERBOSE:-0}"
+CODEX_MODEL="${CODEX_MODEL:-gpt-5.5}"
+CODEX_EFFORT="${CODEX_EFFORT:-xhigh}"
+CODEX_PROFILE="${CODEX_PROFILE:-}"
+CODEX_ADD_DIR="${CODEX_ADD_DIR:-}"
+
+# ── OS detection: Windows bypass sandbox (see run-codex-task.sh for rationale)
+IS_WINDOWS=false
+case "${OSTYPE:-}" in msys*|cygwin*|win32*) IS_WINDOWS=true ;; esac
+[ "${OS:-}" = "Windows_NT" ] && IS_WINDOWS=true
+DEFAULT_BYPASS=0
+[ "$IS_WINDOWS" = true ] && DEFAULT_BYPASS=1
+CODEX_BYPASS_SANDBOX="${CODEX_BYPASS_SANDBOX:-$DEFAULT_BYPASS}"
 
 OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-XXXXXX.md")
 STDOUT_LOG=$(mktemp "${TMPDIR:-/tmp}/codex-testfix-stdout-XXXXXX.log")
@@ -88,8 +100,35 @@ Final report format (keep concise, under 400 words):
 Do NOT include full test output, stack traces, or per-round narration — those are already visible in the event log if needed."
 
 # ── Execute ──────────────────────────────────────────────────
-FLAGS=(--ephemeral --full-auto --color never)
+# Note: --full-auto deprecated → use explicit -s workspace-write; on Windows
+# the bypass flag replaces -s entirely (see SKILL.md "Windows sandbox bypass").
+FLAGS=(--ephemeral --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"")
+[ -n "$CODEX_PROFILE" ] && FLAGS+=(-p "$CODEX_PROFILE")
+[ -n "$CODEX_ADD_DIR" ] && FLAGS+=(--add-dir "$CODEX_ADD_DIR")
 [ "$IS_GIT" = false ] && FLAGS+=(--skip-git-repo-check)
+
+SANDBOX_LABEL=""
+if [ "$CODEX_BYPASS_SANDBOX" = "1" ]; then
+  FLAGS+=(--dangerously-bypass-approvals-and-sandbox)
+  SANDBOX_LABEL="bypassed (Windows default — set CODEX_BYPASS_SANDBOX=0 to disable)"
+else
+  FLAGS+=(-s workspace-write)
+  SANDBOX_LABEL="workspace-write"
+fi
+
+# ── Banner ───────────────────────────────────────────────────
+echo "=== CODEX TEST-FIX ==="
+echo "Model:    $CODEX_MODEL"
+echo "Effort:   $CODEX_EFFORT"
+echo "Sandbox:  $SANDBOX_LABEL"
+echo "TestCmd:  $TEST_CMD"
+echo "Rounds:   $MAX_ROUNDS"
+echo "Timeout:  ${CODEX_TIMEOUT}s"
+[ -n "$CODEX_PROFILE" ] && echo "Profile:  $CODEX_PROFILE"
+[ -n "$CODEX_ADD_DIR" ] && echo "AddDir:   $CODEX_ADD_DIR"
+[ -n "$FOCUS" ] && echo "Focus:    $FOCUS"
+echo "Workdir:  $WORKDIR"
+echo ""
 
 EXIT_CODE=0
 timeout "$CODEX_TIMEOUT" codex exec "${FLAGS[@]}" -C "$WORKDIR" -o "$OUTPUT_FILE" "$PROMPT" \
