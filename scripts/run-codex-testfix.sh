@@ -27,6 +27,18 @@ CODEX_EFFORT="${CODEX_EFFORT:-xhigh}"
 CODEX_PROFILE="${CODEX_PROFILE:-}"
 CODEX_ADD_DIR="${CODEX_ADD_DIR:-}"
 
+# ── Effort guard: codex's model_reasoning_effort enum ≠ Claude's effort levels ──
+# codex 0.133.0 accepts: none|minimal|low|medium|high|xhigh. A Claude-style "max"
+# (or any future enum drift) crashes codex at config-load time (EXIT 1) before the
+# API is even called. Downgrade unknown values to xhigh instead of hard-failing.
+case "$CODEX_EFFORT" in
+  none|minimal|low|medium|high|xhigh) ;;
+  *)
+    echo "[WARN] CODEX_EFFORT='$CODEX_EFFORT' not supported by codex (valid: none/minimal/low/medium/high/xhigh). Falling back to xhigh." >&2
+    CODEX_EFFORT="xhigh"
+    ;;
+esac
+
 # ── OS detection: Windows bypass sandbox (see run-codex-task.sh for rationale)
 IS_WINDOWS=false
 case "${OSTYPE:-}" in msys*|cygwin*|win32*) IS_WINDOWS=true ;; esac
