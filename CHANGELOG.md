@@ -3,6 +3,23 @@
 All notable changes to codex-delegate are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.2] — 2026-06-01
+
+### Fixed
+- **`run-codex-review.sh` was broken on every invocation** — two stacked bugs introduced by v1.6.0's "explicit model lock", masked by how rarely cross-review runs (`run-codex-task.sh` / `run-codex-testfix.sh` were fine: their `xhigh` effort is valid).
+  1. **Invalid effort `max`**: codex 0.133.0's `model_reasoning_effort` enum is `none|minimal|low|medium|high|xhigh` — there is **no `max`** (that is a Claude-only level). v1.6.0 hardcoded `max` for review, so codex aborts at config-load with `error: unknown variant 'max'` (EXIT 1) before the API is even called. Fix: review default reverted to `xhigh`, and **all three scripts now validate `CODEX_EFFORT` against the enum**, downgrading unknown values to `xhigh` with a stderr warning (guards against future enum drift).
+  2. **Exec-only flags fed to the `codex review` subcommand**: the script passed `--ephemeral/--color/-m/-o/-p`, none of which `codex review` accepts → `error: unexpected argument '--ephemeral'` (EXIT 2) at arg-parse. `codex review` is a minimal subcommand (`-c/--uncommitted/--base/--commit/--title` only), cannot combine a scope flag with a custom prompt, and has no `-o` to capture the report.
+
+### Changed
+- **`run-codex-review.sh` rewritten to run as `codex exec -s read-only`** instead of the `codex review` subcommand. The script now computes the diff itself (`git diff HEAD` + untracked files, or `--base` / `--commit`) and **feeds it to codex as text**, so codex spawns no child process. This (a) preserves the `-o` capture + token-economy IO model shared with the other scripts, (b) keeps the structured `[SEVERITY] file:line` output, (c) avoids the Windows "sandbox: spawn setup refresh" bug that would otherwise hang a read-only review at EXIT 124 when codex tries to spawn `git diff` itself, and (d) is truly zero-write. The CLI interface (`run-codex-review.sh <dir> [prompt] [--base|--commit]`) is unchanged.
+- **New `MAX_DIFF_BYTES` env var** (default 200000): caps the diff size fed into the review prompt; oversized diffs are truncated with a note.
+- **Version sync**: `marketplace.json` bumped 1.5.0 → 1.6.2 (it had lagged behind `plugin.json` / SKILL).
+
+### Note
+- The `[1.6.1]` entry claimed "`run-codex-review.sh` left untouched … not affected by the Windows bug." That was wrong on two counts (the effort + flag bugs above); resolved here.
+
+---
+
 ## [1.6.1] — 2026-05-26
 
 ### Fixed

@@ -7,7 +7,7 @@ description: >-
   micro-edits, batch refactors across 5+ files, iterative test-fix cycles,
   post-implementation cross review, or read-only bug diagnosis. Codex runs
   as a subprocess; its reasoning stays out of Claude's context window.
-version: 1.6.1
+version: 1.6.2
 ---
 
 # Delegate to Codex
@@ -215,7 +215,7 @@ All three scripts now **explicitly lock the model and effort level** at invocati
 | Script | Model | Effort | Rationale |
 |--------|-------|--------|-----------|
 | `run-codex-task.sh` | `gpt-5.5` | `xhigh` | Standard execution baseline |
-| `run-codex-review.sh` | `gpt-5.5` | `max` | Diagnostic depth > speed for reviews |
+| `run-codex-review.sh` | `gpt-5.5` | `xhigh` | Diagnostic depth > speed (codex has NO `max` effort — that is Claude-only) |
 | `run-codex-testfix.sh` | `gpt-5.5` | `xhigh` | Multiple iteration rounds, balance depth and time |
 
 ### Environment Variable Overrides
