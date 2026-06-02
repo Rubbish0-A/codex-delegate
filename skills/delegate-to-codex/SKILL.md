@@ -7,7 +7,7 @@ description: >-
   micro-edits, batch refactors across 5+ files, iterative test-fix cycles,
   post-implementation cross review, or read-only bug diagnosis. Codex runs
   as a subprocess; its reasoning stays out of Claude's context window.
-version: 1.6.2
+version: 1.6.3
 ---
 
 # Delegate to Codex

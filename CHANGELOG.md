@@ -3,6 +3,19 @@
 All notable changes to codex-delegate are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.3] — 2026-06-02
+
+### Fixed
+- **Hardened `run-codex-review.sh`'s diff collection** — three issues found by dogfooding the v1.6.2 review on its own fix commit:
+  - **Silent error swallowing**: `--base` / `--commit` used `git diff … 2>/dev/null || true`, so an invalid base branch or commit silently became an empty diff and a false "nothing to review" success. Now `git diff` / `git show` failures print the git error and exit 1.
+  - **Newline-unsafe untracked paths**: untracked files were read via newline-delimited `git ls-files --others`, mis-splitting paths that contain newlines. Now uses `git ls-files -z` + `read -r -d ''` (NUL-delimited).
+  - **Unbounded untracked reads**: untracked file contents were fully read into the diff *before* the `MAX_DIFF_BYTES` cap applied. Now each untracked file is capped with `head -c`, binary/empty files are skipped (`grep -Iq`), and collection stops once the diff already exceeds the cap — so one huge or binary untracked file can't hang the review.
+
+### Note
+- All three were surfaced by running v1.6.2's own `run-codex-review.sh` against commit `50c5518` — the freshly-fixed review feature reviewing its own fix, then fixing what it found. Validates that cross-review actually works.
+
+---
+
 ## [1.6.2] — 2026-06-01
 
 ### Fixed

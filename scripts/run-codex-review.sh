@@ -71,20 +71,39 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
 fi
 
 # ── Collect the diff TEXT ourselves (codex must NOT spawn git) ──
+# git diff/show return non-zero only on real errors (bad ref), not on "no changes",
+# so `if ! DIFF=$(...)` precisely catches an invalid base/commit instead of silently
+# producing an empty diff that looks like a false "nothing to review" success.
 if [ -n "$BASE_BRANCH" ]; then
-  DIFF=$(git diff "$BASE_BRANCH"...HEAD 2>/dev/null || true)
+  if ! DIFF=$(git diff "$BASE_BRANCH"...HEAD 2>&1); then
+    echo "[ERROR] git diff against base '$BASE_BRANCH' failed:" >&2
+    echo "$DIFF" >&2
+    exit 1
+  fi
   REVIEW_SCOPE="against base: $BASE_BRANCH"
 elif [ -n "$COMMIT_SHA" ]; then
-  DIFF=$(git show "$COMMIT_SHA" 2>/dev/null || true)
+  if ! DIFF=$(git show "$COMMIT_SHA" 2>&1); then
+    echo "[ERROR] git show '$COMMIT_SHA' failed:" >&2
+    echo "$DIFF" >&2
+    exit 1
+  fi
   REVIEW_SCOPE="commit: $COMMIT_SHA"
 else
   DIFF=$(git diff HEAD 2>/dev/null || true)
   # Append untracked files as additions so they are reviewed too.
-  while IFS= read -r f; do
+  # NUL-delimited (-z + read -d '') is newline-safe for unusual paths. Skip binary/
+  # empty files, cap each file's read with head -c, and stop collecting once the diff
+  # already exceeds MAX_DIFF_BYTES — so one huge/binary untracked file can't hang us.
+  while IFS= read -r -d '' f; do
     [ -n "$f" ] || continue
+    [ "${#DIFF}" -gt "$MAX_DIFF_BYTES" ] && break
+    if ! grep -Iq . "$f" 2>/dev/null; then
+      DIFF+=$'\n'"diff --git a/$f b/$f (untracked, binary or empty — skipped)"$'\n'
+      continue
+    fi
     DIFF+=$'\n'"diff --git a/$f b/$f (untracked new file)"$'\n'
-    DIFF+="$(sed 's/^/+/' "$f" 2>/dev/null || true)"$'\n'
-  done < <(git ls-files --others --exclude-standard 2>/dev/null)
+    DIFF+="$(head -c "$MAX_DIFF_BYTES" "$f" | sed 's/^/+/' 2>/dev/null || true)"$'\n'
+  done < <(git ls-files -z --others --exclude-standard 2>/dev/null)
   REVIEW_SCOPE="uncommitted changes"
 fi
 

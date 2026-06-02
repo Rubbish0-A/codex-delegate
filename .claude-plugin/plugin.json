@@ -1,6 +1,6 @@
 {
   "name": "codex-delegate",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Intelligent Claude-Codex collaboration plugin with on-demand delegation, cross review, test-fix cycles, and bug diagnosis. Locks model/effort explicitly per invocation.",
   "author": {
     "name": "cjh"
